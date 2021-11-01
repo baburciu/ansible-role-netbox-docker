@@ -1,0 +1,11 @@
+# run as:
+# source pyenv-ansible-2.9/bin/activate
+# (pyenv-ansible-2.9) # ansible-playbook deploy-netbox-docker.yml
+
+---
+- name: Deploy NetBox docker with Ansible
+  hosts: localhost
+  become: yes
+  become_method: sudo
+  roles:
+    - ansible-role-netbox-docker  # if installed to default location ~/.ansible/roles/ansible-role-netbox-docker
