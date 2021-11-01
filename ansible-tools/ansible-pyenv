@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# safe-guard in case the machine has non en_* locale, or in case
+# people logged on the machine from a non en_* locale and with LC_*/LANG not
+# from pruned ssh SendEnv
+export LANG=C
+
+# For ansible 2.9 we need python3 and in RHEL7/CentOS7 that is part of SCL
+export PATH=${PATH}:/usr/bin/python3.6
+export ANSIBLE_VERSION=2.9
+
+# Usage checkversion $ANSIBLE_VERSION '>=' 2.7
+checkversion() {
+  right=$1
+  operator=$2
+  left=$3
+  awk -vv1="$right" -vv2="$left" 'BEGIN{
+    split(v1, a, /\./);
+    split(v2, b, /\./);
+    if (a[1] == b[1]) {
+      exit (a[2] '$operator' b[2]) ? 0 : 1
+    } else {
+      exit (a[1] '$operator' b[1]) ? 0 : 1
+    }
+  }'
+}
+
+ANSIBLE_VERSION=${ANSIBLE_VERSION-"2.9"}
+PYENV_PATH="pyenv-ansible-${ANSIBLE_VERSION}"
+
+if checkversion ${ANSIBLE_VERSION} '>=' 2.9 ; then
+    PYTHON=$(which python3)
+    VIRTUALENV=${PYTHON%%python3}virtualenv
+    PIP=pip3
+else
+    PYTHON=$(which python)
+    VIRTUALENV=${PYTHON%%python}virtualenv
+    PIP=pip
+
+fi
+
+if [ ! -f "${PYENV_PATH}/bin/activate" ]; then
+  ${VIRTUALENV} -p ${PYTHON} ${PYENV_PATH} --system-site-packages && \
+    source ${PYENV_PATH}/bin/activate && \
+    ${PIP} install -r tools/pyenv-infra.requirements.txt -c tools/pyenv-infra.upper-constraints.txt --upgrade && \
+    ${PIP} install -r tools/${PYENV_PATH}.requirements.txt -c tools/${PYENV_PATH}.upper-constraints.txt --upgrade --ignore-installed && \
+    deactivate && \
+#   ${VIRTUALENV} ${PYENV_PATH} --relocatable
+  if [ ! -z "${RPM_BUILD_ROOT}" ] ; then
+    sed -i "s#${RPM_BUILD_ROOT%/}##" ${PYENV_PATH}/bin/*
+  fi
+fi
+
+source ${PYENV_PATH}/bin/activate
