@@ -84,6 +84,29 @@ services:
     - default
     restart: unless-stopped
 
+  traefik:
+    image: "traefik:v2.4"
+    container_name: "traefik"
+    ports:
+      # HTTPS / SSL port
+      - "443:443"
+      # The Traefik Web UI port (enabled by api:insecure: true in traefik.yml)
+      - "8080:8080"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/config.yml:/etc/traefik/config.yml:ro
+      - ./certs:/etc/certs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    {% if traefik_container_labels %}
+    labels:
+      {{ traefik_container_labels | to_nice_yaml | indent(6) }}
+    {% endif %}
+    networks:
+    - default
+#    {% if traefik_proxy_network_name %}
+#    - proxy
+#    {% endif %}
+
 volumes:
   netbox-media-files:
     driver: local
@@ -92,9 +115,9 @@ volumes:
   netbox-redis-data:
     driver: local
 
-{% if netbox_proxy_network_name %}
-networks:
-  proxy:
-    external:
-      name: {{ netbox_proxy_network_name }}
-{% endif %}
+#{% if traefik_proxy_network_name %}
+#networks:
+#  proxy:
+#    external:
+#      name: {{ traefik_proxy_network_name }}
+#{% endif %}
