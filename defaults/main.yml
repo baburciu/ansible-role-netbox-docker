@@ -1,18 +1,23 @@
 ---
 netbox_base_dir: /opt/netbox
-netbox_port: 8080
+netbox_port: null
+#netbox_proxy_network_name: 'default'
 
-netbox_netbox_image: netboxcommunity/netbox:v2.10.4
+netbox_netbox_image: netboxcommunity/netbox:v3.0-ldap-1.4.1
 netbox_redis_image: redis:6-alpine
-netbox_postgres_image: postgres:12-alpine
+netbox_postgres_image: postgres:13-alpine
 
 netbox_admin_api_token: ''
-netbox_admin_email: admin@example.com
+netbox_admin_email: admin@boburciu.privatecloud.com
 netbox_admin_password: admin
 netbox_admin_username: admin
 netbox_allowed_hosts: '*'
 netbox_container_env: []
-netbox_container_labels: []
+netbox_container_labels:
+  - traefik.enable:'true'
+  - traefik.http.services.netbox.loadbalancer.server.port:"8080"
+  - traefik.http.routers.netbox.tls:'true'
+  - traefik.http.routers.netbox.rule:"Host(`netbox.boburciu.privatecloud.com`)"
 netbox_cors_origin_allow_all: true
 netbox_cors_origin_whitelist: http://localhost
 netbox_default_page_size: 250
@@ -46,3 +51,18 @@ netbox_secret_key: r8OwDznj!!dci#P9ghmRfdu1Ysxm0AiPeDCQhKE+N_rClfWNj
 netbox_skip_startup_scripts: false
 netbox_skip_superuser: false
 netbox_webhooks_enabled: true
+
+traefik_container_labels:
+  - traefik.enable:"true"
+  - traefik.http.routers.traefik.entrypoints:"http"
+  - traefik.http.routers.traefik.rule:"Host(`netbox.boburciu.privatecloud.com`)"
+  - traefik.http.middlewares.traefik-auth.basicauth.users:"USER:PASSWORD"
+  - traefik.http.middlewares.traefik-https-redirect.redirectscheme.scheme:"https"
+  - traefik.http.routers.traefik.middlewares:"traefik-https-redirect"
+  - traefik.http.routers.traefik-secure.entrypoints:"https"
+  - traefik.http.routers.traefik-secure.rule:"Host(`netbox.boburciu.privatecloud.com`)"
+  - traefik.http.routers.traefik-secure.middlewares:"traefik-auth"
+  - traefik.http.routers.traefik-secure.tls:"true"
+  - traefik.http.routers.traefik-secure.tls.certresolver:"http"
+  - traefik.http.routers.traefik-secure.service:"api@internal"
+traefik_proxy_network_name: 'default'
