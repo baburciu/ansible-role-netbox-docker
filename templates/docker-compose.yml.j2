@@ -25,10 +25,6 @@ services:
     - "8080"
     {% endif %}
     restart: unless-stopped
-    {% if netbox_container_labels %}
-    labels:
-      {{ netbox_container_labels | to_nice_yaml | indent(6) }}
-    {% endif %}
     networks:
     - default
     {% if netbox_proxy_network_name %}
