@@ -1,6 +1,6 @@
 Netbox Docker
 =============
-Ansible role to configure Netbox as a docker-compose project.
+Ansible role to configure Netbox as a docker-compose project with a Caddy Revere-Proxy in front of it, for TLS termination.
 
 
 Installation
@@ -10,27 +10,103 @@ Install this role with Ansible Galaxy:
 `ansible-galaxy install git+https://github.com/baburciu/ansible-role-netbox-docker.git`
 
 
-Local Installation
-------------------
-If you'd like to include this role directly in a playbook, set your [`roles_path`](https://docs.ansible.com/ansible/latest/reference_appendices/galaxy.html#roles-path) to `./roles` via environment variable or `ansible.cfg`.
-
-Then, add this role to your playbook's `requirements.yml`:
-
-```
-- src: https://github.com/wastrachan/ansible-role-netbox-docker
-  version: master
-  name: netbox-docker
-```
-
-And finally, install the role with Ansible Galaxy:
-
-`ansible-galaxy install -r requirements.yml`
-
-
 Requirements
 ------------
 `docker` and `docker-compose` must be available and installed on the target system.
+Caddy (Reverse-Proxy in fron of NetBox) server certificate, server key certificate are in a directory defined by `netbox_base_dir`:`/opt/netbox` role variable.
 
+```shell
+files
+└── /opt/netbox
+    ├── caddy-server.crt
+    └── caddy-server.key
+```
+
+Caddy (Reverse-Proxy in fron of NetBox) server certificate, server key certificate are in a directory defined by `netbox_base_dir`:`/opt/netbox` role variable.
+
+```shell
+files
+└── /opt/netbox
+    ├── caddy-server.crt
+    └── caddy-server.key
+```
+
+To generate a server key:
+
+```shell
+openssl genrsa -out caddy-server.key 4096
+```
+
+Generate certificate request (`CSR`) with a configuration file like this:
+
+```shell
+# caddy-server.conf
+[ req ]
+prompt = no
+distinguished_name = dn
+req_extensions = req_ext
+
+[ dn ]
+CN = netbox.boburciu.privatecloud.com
+emailAddress = bogdan.burciu@boburciu.privatecloud.com
+O = BOBURCIU.PRIVATECLOUD
+OU = SEC
+C = RO
+
+[ req_ext ]
+subjectAltName =  DNS:netbox.boburciu.privatecloud.com, DNS:localhost, IP:192.168.200.222
+```
+
+And the following `openssl` command:
+
+```shell
+openssl req -new -config caddy-server.conf -key caddy-server.key -out caddy-server.csr
+```
+
+Then request the CA to sign the CSR and fetch the certificate, e.g. `caddy-server.crt`.
+
+In case you don't have a CA, we can be our own certificate authority (CA) by creating a self-signed root CA certificate, then install it as a trusted certificate in the local browser.
+Create a private key (ca.key) and a self-signed root CA certificate (ca.crt) from the command line:
+
+```shell
+openssl req -x509 -sha256 -days 1825 -newkey rsa:2048 -keyout ca.key -out ca.crt
+```
+
+Even though CSR can contain SANs, the signer does not have to include all SANs requested (and can itself add SANs it signs), that is why we need to use `-extfile caddy-server.conf -extensions req_ext` so that the `req_ext` section with the SANs is enforced during signing.
+
+```shell
+openssl x509 -req -CA ca.crt -CAkey ca.key -extensions req_ext -in caddy-server.csr -out caddy-server.crt -days 365 -CAcreateserial -extfile caddy-server.conf 
+```
+
+We can check the server cert used by Caddy for HTTPS clients and notice the SANs (`openssl x509 -text -noout -in caddy-server.crt`).
+```shell
+Certificate:
+    Data:
+        Version: 3 (0x2)
+        Serial Number:
+            e4:a4:f2:ae:19:f8:e3:00
+    Signature Algorithm: sha256WithRSAEncryption
+        Issuer: C=RO, ST=Romania, L=Bucharest, O=BOBURCIU.PRIVATECLOUD, CN=netbox.boburciu.privatecloud.com/emailAddress=bogdan.burciu@boburciu.privatecloud.com
+        Validity
+            Not Before: Nov  2 14:14:48 2021 GMT
+            Not After : Nov  2 14:14:48 2022 GMT
+        Subject: CN=netbox.boburciu.privatecloud.com/emailAddress=name.surname@boburciu.privatecloud.com, O=BOBURCIU.PRIVATECLOUD, OU=SEC, C=RO
+        Subject Public Key Info:
+            Public Key Algorithm: rsaEncryption
+                Public-Key: (4096 bit)
+                Modulus:
+                    00:d2:0c:a7:8b:11:5f:c0:43:7e:6c:f2:ea:03:f7:
+:
+                   23:d4:ed
+                Exponent: 65537 (0x10001)
+        X509v3 extensions:
+            X509v3 Subject Alternative Name:
+                DNS:netbox.boburciu.privatecloud.com, DNS:localhost, IP Address:192.168.200.222
+    Signature Algorithm: sha256WithRSAEncryption
+         3e:bf:4f:a0:f3:27:9a:d3:c8:df:5e:8b:3f:64:c2:cc:30:b5:
+:
+         44:9e:06:3a
+```
 
 Role Variables
 --------------
@@ -68,7 +144,7 @@ Configuration and installation options are made available as variables. Some of 
 | `netbox_max_page_size`         | `1000`                           | Maximum number of objects for paginated API requests
 | `netbox_metrics_enabled`       | `false`                          | Expose Prometheus monitoring metrics at the HTTP endpoint '/metrics'
 | `netbox_napalm_password`       | -                                | Credentials that NetBox will use to authenticate to devices when connecting via NAPALM
-| `netbox_napalm_timeout`        | `10`                             | Credentials that NetBox will use to authenticate to devices when connecting via NAPALM
+| `netbox_napalm_timeout`        | `10`                             | NetBox session timeout for network devices when connecting via NAPALM
 | `netbox_napalm_username`       | -                                | Credentials that NetBox will use to authenticate to devices when connecting via NAPALM
 | `netbox_pg_db`                 | `netbox`                         | Postgres database name
 | `netbox_pg_host`               | `postgres`                       | Postgres database host. This should not be changed if using the default docker-compose setup.
@@ -89,34 +165,101 @@ Example Playbook
 ----------------
 Including an example of how to use your role (for instance, with variables passed in as parameters) is always nice for users too:
 
-    - hosts: servers
-      roles:
-        - netbox-docker
-
+```shell
+---
+- name: Deploy NetBox docker with Ansible
+  hosts: localhost
+  become: yes
+  become_method: sudo
+  roles:
+    - ansible-role-netbox-docker
+```
 
 Traefik/nginx-proxy Support
 ---------------------------
-This playbook can be used with [traefik](https://hub.docker.com/_/traefik) or jwilder's [nginx-proxy](https://hub.docker.com/r/jwilder/nginx-proxy) by adding labels with `netbox_container_labels`, or environment variables with `netbox_container_env`, respectively. Additionally, `netbox_proxy_network_name` will attach the netbox service to an additional network, as traefik/nginx-proxy usually reside in a network other than that created by docker-compose projects. While not a complete guide to these services, your configuration may look like the below:
+This playbook can be used with [traefik](https://doc.traefik.io/traefik/v2.1/routing/routers/#rule) or jwilder's [nginx-proxy](https://hub.docker.com/r/jwilder/nginx-proxy) by adding labels with `netbox_container_labels`, or environment variables with `netbox_container_env`, respectively. Additionally, `netbox_proxy_network_name` will attach the netbox service to an additional network, as traefik/nginx-proxy usually reside in a network other than that created by docker-compose projects. 
 
 #### traefik
 ```yaml
-netbox_port: null
-netbox_proxy_network_name: 'default'
+# ./defaults/main.yml:
 netbox_container_labels:
-  traefik.enable: "true"
-  traefik.http.services.netbox.loadbalancer.server.port: "8080"
-  traefik.http.routers.netbox.rule: "Host(`netbox.domain.com`)"
-```
-
-#### nginx-proxy
-```yaml
-netbox_port: null
+  - traefik.enable:'true'
+  - traefik.http.services.netbox.loadbalancer.server.port:"8080"
+  - traefik.http.routers.netbox.tls:'true'
+  - traefik.http.routers.netbox.rule:"Host(`netbox.boburciu.privatecloud.com`)"
 netbox_proxy_network_name: 'default'
-netbox_container_env:
-  VIRTUAL_HOST: netbox.domain.com
-  VIRTUAL_PORT: "8080"
-```
 
+traefik_container_labels:
+  - traefik.enable:"true"
+  - traefik.http.routers.traefik.entrypoints:"http"
+  - traefik.http.routers.traefik.rule:"Host(`netbox.boburciu.privatecloud.com`)"
+  - traefik.http.middlewares.traefik-auth.basicauth.users:"USER:PASSWORD"
+  - traefik.http.middlewares.traefik-https-redirect.redirectscheme.scheme:"https"
+  - traefik.http.routers.traefik.middlewares:"traefik-https-redirect"
+  - traefik.http.routers.traefik-secure.entrypoints:"https"
+  - traefik.http.routers.traefik-secure.rule:"Host(`netbox.boburciu.privatecloud.com`)"
+  - traefik.http.routers.traefik-secure.middlewares:"traefik-auth"
+  - traefik.http.routers.traefik-secure.tls:"true"
+  - traefik.http.routers.traefik-secure.tls.certresolver:"http"
+  - traefik.http.routers.traefik-secure.service:"api@internal"
+traefik_proxy_network_name: 'default'
+
+
+# templates/docker-compose.yml.j2:
+services:
+  netbox: &netbox
+    image: {{ netbox_netbox_image }}
+    depends_on:
+    - postgres
+    - redis
+    - redis-cache
+    - netbox-worker
+    env_file: env/netbox.env
+    user: '101'
+    volumes:
+    - ./reports:/etc/netbox/reports:z,ro
+    - ./scripts:/etc/netbox/scripts:z,ro
+    - netbox-media-files:/opt/netbox/netbox/media:z
+    {% if netbox_port %}
+    ports:
+    - "{{ netbox_port }}:8080"
+    {% else %}
+    expose:
+    - "8080"
+    {% endif %}
+    restart: unless-stopped
+    {% if netbox_container_labels %}
+    labels:
+      {{ netbox_container_labels | to_nice_yaml | indent(6) }}
+    {% endif %}
+    networks:
+    - default
+    {% if netbox_proxy_network_name %}
+    - proxy
+    {% endif %}
+  traefik:
+    image: "traefik:v2.4"
+    container_name: "traefik"
+    ports:
+      # HTTPS / SSL port
+      - "443:443"
+      # The Traefik Web UI port (enabled by api:insecure: true in traefik.yml)
+      - "8080:8080"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/config.yml:/etc/traefik/config.yml:ro
+      - ./certs:/etc/certs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    {% if traefik_container_labels %}
+    labels:
+      {{ traefik_container_labels | to_nice_yaml | indent(6) }}
+    {% endif %}
+    networks:
+    - default
+   {% if traefik_proxy_network_name %}
+   - proxy
+   {% endif %}
+```
 
 License
 -------
