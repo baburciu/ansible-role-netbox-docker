@@ -1,6 +1,6 @@
 Netbox Docker
 =============
-Ansible role to configure Netbox as a docker-compose project with a Caddy Revere-Proxy in front of it, for TLS termination.
+Ansible role to configure Netbox as a docker-compose project with a Caddy Reverse-Proxy in front of it, for TLS termination.
 
 
 Installation
@@ -12,8 +12,9 @@ Install this role with Ansible Galaxy:
 
 Requirements
 ------------
-`docker` and `docker-compose` must be available and installed on the target system.
-Caddy (Reverse-Proxy in fron of NetBox) server certificate, server key certificate are in a directory defined by `netbox_base_dir`:`/opt/netbox` role variable.
+- [x] `docker` and `docker-compose` must be available and installed on the target system.
+
+- [x] Caddy (Reverse-Proxy in fron of NetBox) server certificate, server key certificate are in a directory defined by `netbox_base_dir`:`/opt/netbox` role variable.
 
 ```shell
 files
@@ -22,15 +23,9 @@ files
     └── caddy-server.key
 ```
 
-Caddy (Reverse-Proxy in fron of NetBox) server certificate, server key certificate are in a directory defined by `netbox_base_dir`:`/opt/netbox` role variable.
+- [x] The X509v3 Subject Alternative Name of the `caddy-server.crt` must be defined in `caddy_cert_san` and `caddy_default_sni` role variables.
 
-```shell
-files
-└── /opt/netbox
-    ├── caddy-server.crt
-    └── caddy-server.key
-```
-
+<br/>
 To generate a server key:
 
 ```shell
@@ -80,32 +75,9 @@ openssl x509 -req -CA ca.crt -CAkey ca.key -extensions req_ext -in caddy-server.
 
 We can check the server cert used by Caddy for HTTPS clients and notice the SANs (`openssl x509 -text -noout -in caddy-server.crt`).
 ```shell
-Certificate:
-    Data:
-        Version: 3 (0x2)
-        Serial Number:
-            e4:a4:f2:ae:19:f8:e3:00
-    Signature Algorithm: sha256WithRSAEncryption
-        Issuer: C=RO, ST=Romania, L=Bucharest, O=BOBURCIU.PRIVATECLOUD, CN=netbox.boburciu.privatecloud.com/emailAddress=bogdan.burciu@boburciu.privatecloud.com
-        Validity
-            Not Before: Nov  2 14:14:48 2021 GMT
-            Not After : Nov  2 14:14:48 2022 GMT
-        Subject: CN=netbox.boburciu.privatecloud.com/emailAddress=name.surname@boburciu.privatecloud.com, O=BOBURCIU.PRIVATECLOUD, OU=SEC, C=RO
-        Subject Public Key Info:
-            Public Key Algorithm: rsaEncryption
-                Public-Key: (4096 bit)
-                Modulus:
-                    00:d2:0c:a7:8b:11:5f:c0:43:7e:6c:f2:ea:03:f7:
-:
-                   23:d4:ed
-                Exponent: 65537 (0x10001)
         X509v3 extensions:
             X509v3 Subject Alternative Name:
                 DNS:netbox.boburciu.privatecloud.com, DNS:localhost, IP Address:192.168.200.222
-    Signature Algorithm: sha256WithRSAEncryption
-         3e:bf:4f:a0:f3:27:9a:d3:c8:df:5e:8b:3f:64:c2:cc:30:b5:
-:
-         44:9e:06:3a
 ```
 
 Role Variables
@@ -159,6 +131,8 @@ Configuration and installation options are made available as variables. Some of 
 | `netbox_skip_startup_scripts`  | `false`                          | If true, do not run startup scripts on container start
 | `netbox_skip_superuser`        | `false`                          | If true, do not create superuser on container start
 | `netbox_webhooks_enabled`      | `true`                           | If true, enable netbox webhooks functionality
+| `caddy_cert_san`               | `netbox.boburciu.privatecloud`   | List of Subject Alternative Name fields (DNS/IP) for the Caddy server cert
+| `caddy_default_sni`            | `192.168.200.222`                | The IP address of the VM on which NetBox/Caddy is deployed, will use this IP address as TLS SNI for all ClientHello messages that come without one (when IP address is used in URL instead of hostname) - mandatory for Caddy
 
 
 Example Playbook
@@ -203,6 +177,7 @@ traefik_container_labels:
   - traefik.http.routers.traefik-secure.tls.certresolver:"http"
   - traefik.http.routers.traefik-secure.service:"api@internal"
 traefik_proxy_network_name: 'default'
+
 
 
 # templates/docker-compose.yml.j2:
