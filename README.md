@@ -14,7 +14,7 @@ Requirements
 ------------
 - [x] `docker` and `docker-compose` must be available and installed on the target system.
 
-- [x] Caddy (Reverse-Proxy in fron of NetBox) server certificate, server key certificate are in a directory defined by `netbox_base_dir`:`/opt/netbox` role variable.
+- [x] Caddy server certificate and server key are in a directory defined by `netbox_base_dir`:`/opt/netbox` role variable.
 
 ```shell
 files
