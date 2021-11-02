@@ -32,7 +32,7 @@ services:
     networks:
     - default
     {% if netbox_proxy_network_name %}
-    - proxy
+    - {{ netbox_proxy_network_name }}
     {% endif %}
 
   netbox-worker:
@@ -84,28 +84,22 @@ services:
     - default
     restart: unless-stopped
 
-  traefik:
-    image: "traefik:v2.4"
-    container_name: "traefik"
-    ports:
-      # HTTPS / SSL port
-      - "443:443"
-      # The Traefik Web UI port (enabled by api:insecure: true in traefik.yml)
-      - "8080:8080"
+  caddy-rp:
+    image: caddy:2.4.0-beta.2-alpine
+    depends_on:
+      - netbox
     volumes:
-      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./traefik/config.yml:/etc/traefik/config.yml:ro
-      - ./certs:/etc/certs:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    {% if traefik_container_labels %}
-    labels:
-      {{ traefik_container_labels | to_nice_yaml | indent(6) }}
-    {% endif %}
+      - ./caddy-server.crt:/etc/ssl/private/cert.crt:ro,z
+      - ./caddy-server.key:/etc/ssl/private/key.key:ro,z
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - 80:80   # Allows for http redirection
+      - 443:443
     networks:
+    {% if netbox_proxy_network_name %}
+    - {{ netbox_proxy_network_name }}
+    {% else %} 
     - default
-#    {% if traefik_proxy_network_name %}
-#    - proxy
-#    {% endif %}
 
 volumes:
   netbox-media-files:
@@ -115,9 +109,10 @@ volumes:
   netbox-redis-data:
     driver: local
 
-#{% if traefik_proxy_network_name %}
-#networks:
-#  proxy:
-#    external:
-#      name: {{ traefik_proxy_network_name }}
-#{% endif %}
+networks:
+  default:
+    driver: bridge
+  {% if netbox_proxy_network_name %}
+  {{ netbox_proxy_network_name }}:
+    driver: bridge  
+  {% endif %}
