@@ -25,7 +25,7 @@
     dest: "{{ netbox_base_dir }}/{{ item }}"
   loop:
     - docker-compose.yml
-    - Caddyfile.yml
+    - Caddyfile
   notify: restart netbox
 
 - name: remove outdated files
