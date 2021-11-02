@@ -96,6 +96,7 @@ services:
     - {{ netbox_proxy_network_name }}
     {% else %} 
     - default
+    {% endif %}
 
 volumes:
   netbox-media-files:
