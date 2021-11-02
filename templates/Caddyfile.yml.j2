@@ -1,0 +1,17 @@
+# ./Caddyfile
+{
+        default_sni {{ caddy_default_sni }}       # will use this IP as TLS SNI for all ClientHellos that come without one (IPb address is used in URL instead of hostname); Caddy needs to see SNI, otherwise it returns TLS Alert
+}
+
+ {{ caddy_cert_san|join(', ') }} {
+    reverse_proxy netbox:8080
+    encode gzip zstd
+    file_server
+    tls /etc/ssl/private/cert.crt /etc/ssl/private/key.key
+    # or:
+    # tls /etc/ssl/private/cert.pem
+
+    log {
+      level error
+    }
+}
