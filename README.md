@@ -7,7 +7,7 @@ Installation
 ------------
 Install this role with Ansible Galaxy:
 
-`ansible-galaxy install git+https://github.com/baburciu/ansible-role-netbox-docker.git`
+`ansible-galaxy install git+https://github.com/baburciu/ansible-role-netbox-docker.git --roles-path=~/netbox-project`
 
 
 Requirements
